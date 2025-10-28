@@ -102,10 +102,15 @@ For each risky policy detected:
 ## Overall logic (big-picture)
 
 Configure logging and clients (AWS and Gemini).
+
 Scan all customer-managed IAM policies in the account.
+
 Fetch the active JSON policy document for each policy.
+
 Detect risky statements (currently only wildcard * actions or resources).
+
 For risky policies, call an AI model to produce human-readable explanations and remediation suggestions.
+
 Save all findings to a JSON report and print a summary.
 
 ## 🔧 Configuration
