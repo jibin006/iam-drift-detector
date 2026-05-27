@@ -1,4 +1,28 @@
-*.json
-__pycache__/
-*.pyc
+# Never commit credentials
 .env
+*.env
+.env.*
+
+# Report output (contains policy details — may be sensitive)
+iam-scan-report.json
+iam_risky_policies.json
+
+# Baselines with real account data (example baseline is safe to commit)
+# baselines/prod-*.json — add entries per environment
+baselines/prod-*.json
+baselines/staging-*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
