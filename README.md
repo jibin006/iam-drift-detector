@@ -199,4 +199,4 @@ What broke during build and what it revealed — see [`FAILURES.md`](./FAILURES.
 
 ## Threat Model
 
-What this tool is trying to detect and where it's blind — see [`docs/threat-model.md`](./docs/threat-model.md).
+What this tool is trying to detect and where it's blind — see [`docs/threat-model.md`](./threat-model.md).
