@@ -1,0 +1,83 @@
+{
+  "generated_at": "2025-03-15T09:00:00+00:00",
+  "_comment": "Generated after clean Terraform apply. Commit alongside terraform/iam/. Do not edit manually.",
+  "policy_count": 3,
+  "policies": {
+    "arn:aws:iam::ACCOUNT_ID:policy/AppServiceRole": {
+      "policy_name": "AppServiceRole",
+      "document": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "S3AppBucketAccess",
+            "Effect": "Allow",
+            "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+            "Resource": "arn:aws:s3:::my-app-ACCOUNT_ID/*"
+          },
+          {
+            "Sid": "CloudWatchLogsWrite",
+            "Effect": "Allow",
+            "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
+            "Resource": "arn:aws:logs:us-east-1:ACCOUNT_ID:log-group:/app/*"
+          }
+        ]
+      }
+    },
+    "arn:aws:iam::ACCOUNT_ID:policy/DeploymentRole": {
+      "policy_name": "DeploymentRole",
+      "document": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "ECRPush",
+            "Effect": "Allow",
+            "Action": [
+              "ecr:GetAuthorizationToken",
+              "ecr:BatchCheckLayerAvailability",
+              "ecr:PutImage",
+              "ecr:InitiateLayerUpload",
+              "ecr:UploadLayerPart",
+              "ecr:CompleteLayerUpload"
+            ],
+            "Resource": "arn:aws:ecr:us-east-1:ACCOUNT_ID:repository/my-app"
+          },
+          {
+            "Sid": "ECSDeployUpdate",
+            "Effect": "Allow",
+            "Action": ["ecs:UpdateService", "ecs:DescribeServices"],
+            "Resource": "arn:aws:ecs:us-east-1:ACCOUNT_ID:service/my-cluster/my-service"
+          }
+        ]
+      }
+    },
+    "arn:aws:iam::ACCOUNT_ID:policy/IAMAdminWithMFA": {
+      "policy_name": "IAMAdminWithMFA",
+      "document": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "IAMReadOnly",
+            "Effect": "Allow",
+            "Action": ["iam:Get*", "iam:List*"],
+            "Resource": "*"
+          },
+          {
+            "Sid": "IAMWriteRequiresMFA",
+            "Effect": "Allow",
+            "Action": [
+              "iam:CreateRole",
+              "iam:DeleteRole",
+              "iam:AttachRolePolicy",
+              "iam:DetachRolePolicy"
+            ],
+            "Resource": "*",
+            "Condition": {
+              "Bool": {"aws:MultiFactorAuthPresent": "true"},
+              "IpAddress": {"aws:SourceIp": ["10.0.0.0/8"]}
+            }
+          }
+        ]
+      }
+    }
+  }
+}
