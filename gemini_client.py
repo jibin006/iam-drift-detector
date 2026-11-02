@@ -23,8 +23,8 @@ import time
 
 import google.generativeai as genai
 
-from analyzer.risk_analyzer import PolicyAnalysisResult, RiskFinding, Severity
-from analyzer.drift_comparator import DriftFinding
+from risk_analyzer import PolicyAnalysisResult, RiskFinding, Severity
+from drift_comparator import DriftFinding
 
 logger = logging.getLogger(__name__)
 
