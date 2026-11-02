@@ -54,9 +54,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="AWS region (default: us-east-1)",
     )
     parser.add_argument(
+        "--ai",
+        action="store_true",
+        help="Enable optional Gemini explanations. Deterministic scanning works without an API key.",
+    )
+    parser.add_argument(
         "--no-ai",
         action="store_true",
-        help="Skip AI enrichment (useful when Gemini API key is unavailable or for faster scans)",
+        help="Deprecated compatibility flag; AI enrichment is disabled by default.",
     )
     return parser
 
@@ -65,9 +70,12 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    # Validate credentials before doing any work
+    # AI enrichment is explicitly opt-in. Baseline generation and deterministic
+    # scanning must never require an external API credential.
     gemini_key = os.environ.get("GEMINI_API_KEY")
-    if not args.no_ai and not gemini_key:
+    if args.ai and args.no_ai:
+        parser.error("--ai and --no-ai cannot be used together")
+    if args.ai and not gemini_key:
         print(
             "ERROR: GEMINI_API_KEY environment variable not set.\n"
             "Run with --no-ai to skip AI enrichment, or set the key:\n"
@@ -87,10 +95,10 @@ def main() -> None:
         sys.exit(1)
 
     # Lazy imports — keep startup fast
-    from analyzer.scanner import IAMScanner
-    from analyzer.risk_analyzer import IAMRiskAnalyzer
-    from analyzer.drift_comparator import IAMDriftComparator
-    from reporter.report import ScanReport, save_report, print_console_summary
+    from scanner import IAMScanner
+    from risk_analyzer import IAMRiskAnalyzer
+    from drift_comparator import IAMDriftComparator
+    from report import ScanReport, save_report, print_console_summary
 
     scanner = IAMScanner(region=args.region)
     risk_analyzer = IAMRiskAnalyzer()
@@ -142,8 +150,8 @@ def main() -> None:
     # Step 5: AI enrichment (second pass — decoupled from finding collection)
     # FAIL-007: AI enrichment was in the hot path before — it blocked the entire scan.
     # Now it runs after all findings are collected. If Gemini fails, findings are saved anyway.
-    if not args.no_ai and gemini_key and (risk_results or drift_findings):
-        from explainer.gemini_client import GeminiExplainer
+    if args.ai and gemini_key and (risk_results or drift_findings):
+        from gemini_client import GeminiExplainer
         explainer = GeminiExplainer(api_key=gemini_key)
 
         print(f"Enriching {len(risk_results)} risk findings with AI explanations...")
@@ -174,6 +182,15 @@ def main() -> None:
     if has_critical:
         print("⚠  CRITICAL findings detected. Review before merging.", file=sys.stderr)
         sys.exit(2)  # 2 = findings, not crash
+
+    # Never report a clean scan when one or more policies could not be analyzed.
+    if scan_summary.total_failed > 0:
+        print(
+            f"ERROR: Scan incomplete: {scan_summary.total_failed} policy/policies "
+            "could not be analyzed. Review scan_error details before trusting results.",
+            file=sys.stderr,
+        )
+        sys.exit(3)  # 3 = incomplete coverage, not a clean scan
 
 
 if __name__ == "__main__":
