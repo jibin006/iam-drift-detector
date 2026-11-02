@@ -267,8 +267,10 @@ def test_nested_condition_key_removal_is_reported(comparator):
             "Action": "iam:DeleteUser",
             "Resource": "*",
             "Condition": {
-                "Bool": {"aws:MultiFactorAuthPresent": "true"},
-                "IpAddress": {"aws:SourceIp": "192.0.2.0/24"},
+                "StringEquals": {
+                    "aws:username": "security-operator",
+                    "aws:PrincipalTag/team": "platform",
+                },
             },
         }],
     }
@@ -280,7 +282,9 @@ def test_nested_condition_key_removal_is_reported(comparator):
             "Action": "iam:DeleteUser",
             "Resource": "*",
             "Condition": {
-                "Bool": {"aws:MultiFactorAuthPresent": "true"},
+                "StringEquals": {
+                    "aws:PrincipalTag/team": "platform",
+                },
             },
         }],
     }
@@ -300,4 +304,4 @@ def test_nested_condition_key_removal_is_reported(comparator):
         f for f in findings if f.drift_type == DriftType.CONDITION_REMOVED
     ]
     assert len(condition_findings) == 1
-    assert "IpAddress.aws:SourceIp" in condition_findings[0].detail
+    assert "StringEquals.aws:username" in condition_findings[0].detail
