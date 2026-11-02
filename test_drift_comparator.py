@@ -201,3 +201,103 @@ def test_generate_baseline_structure(comparator):
     assert baseline["policy_count"] == 1
     assert SAMPLE_ARN in baseline["policies"]
     assert baseline["policies"][SAMPLE_ARN]["policy_name"] == "MyPolicy"
+
+
+def test_removed_statement_is_reported_as_permission_reduction(comparator):
+    """Removing a Sid-bearing statement must not disappear from drift results."""
+    baseline = make_baseline([{
+        "arn": SAMPLE_ARN,
+        "policy_name": "MyPolicy",
+        "document": BASE_POLICY_DOC,
+    }])
+    live = [{
+        "arn": SAMPLE_ARN,
+        "policy_name": "MyPolicy",
+        "document": {"Version": "2012-10-17", "Statement": []},
+    }]
+
+    findings = comparator.compare_all(live, baseline)
+    assert any(f.drift_type == DriftType.PERMISSIONS_REDUCED for f in findings)
+    assert any("S3ReadAccess" in f.detail for f in findings)
+
+
+def test_explicit_deny_changed_to_allow_is_reported_as_expansion(comparator):
+    """An Effect flip from Deny to Allow is security-significant even with same actions."""
+    deny_policy = {
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Sid": "ProtectAdmin",
+            "Effect": "Deny",
+            "Action": "iam:CreateAccessKey",
+            "Resource": "*",
+        }],
+    }
+    allow_policy = {
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Sid": "ProtectAdmin",
+            "Effect": "Allow",
+            "Action": "iam:CreateAccessKey",
+            "Resource": "*",
+        }],
+    }
+    baseline = make_baseline([{
+        "arn": SAMPLE_ARN,
+        "policy_name": "MyPolicy",
+        "document": deny_policy,
+    }])
+    live = [{
+        "arn": SAMPLE_ARN,
+        "policy_name": "MyPolicy",
+        "document": allow_policy,
+    }]
+
+    findings = comparator.compare_all(live, baseline)
+    assert any(f.drift_type == DriftType.PERMISSIONS_EXPANDED for f in findings)
+    assert any("Effect from Deny to Allow" in f.detail for f in findings)
+
+
+def test_nested_condition_key_removal_is_reported(comparator):
+    """Removing a condition key inside an existing operator is still drift."""
+    baseline_policy = {
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Sid": "DeleteWithMFAAndSourceIp",
+            "Effect": "Allow",
+            "Action": "iam:DeleteUser",
+            "Resource": "*",
+            "Condition": {
+                "Bool": {"aws:MultiFactorAuthPresent": "true"},
+                "IpAddress": {"aws:SourceIp": "192.0.2.0/24"},
+            },
+        }],
+    }
+    live_policy = {
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Sid": "DeleteWithMFAAndSourceIp",
+            "Effect": "Allow",
+            "Action": "iam:DeleteUser",
+            "Resource": "*",
+            "Condition": {
+                "Bool": {"aws:MultiFactorAuthPresent": "true"},
+            },
+        }],
+    }
+    baseline = make_baseline([{
+        "arn": SAMPLE_ARN,
+        "policy_name": "MyPolicy",
+        "document": baseline_policy,
+    }])
+    live = [{
+        "arn": SAMPLE_ARN,
+        "policy_name": "MyPolicy",
+        "document": live_policy,
+    }]
+
+    findings = comparator.compare_all(live, baseline)
+    condition_findings = [
+        f for f in findings if f.drift_type == DriftType.CONDITION_REMOVED
+    ]
+    assert len(condition_findings) == 1
+    assert "IpAddress.aws:SourceIp" in condition_findings[0].detail
