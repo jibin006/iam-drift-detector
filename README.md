@@ -135,6 +135,8 @@ These are documented as open scope items, not bugs. A complete IAM audit pipelin
 
 ## Quick Start
 
+Deterministic scanning and baseline generation do not require an AI API key. Gemini enrichment is opt-in with `--ai`; set `GEMINI_API_KEY` only when enabling it.
+
 ```bash
 pip install -r requirements.txt
 
@@ -142,16 +144,15 @@ pip install -r requirements.txt
 export AWS_ACCESS_KEY_ID=...
 export AWS_SECRET_ACCESS_KEY=...
 export AWS_DEFAULT_REGION=us-east-1
-export GEMINI_API_KEY=...
 
 # Run risk scan only
-python main.py --mode risk
+python main.py --mode risk --no-ai
 
 # Run drift detection against a baseline
-python main.py --mode drift --baseline baselines/prod-baseline.json
+python main.py --mode drift --baseline example-baseline.json --no-ai
 
 # Run both
-python main.py --mode full --baseline baselines/prod-baseline.json
+python main.py --mode full --baseline example-baseline.json --no-ai
 
 # Generate a new baseline from current state (store this in git, treat it as IaC)
 python main.py --mode baseline --output baselines/prod-baseline.json
@@ -185,7 +186,7 @@ Read-only. The scanner never writes, modifies, or creates IAM resources.
 ## Running Tests
 
 ```bash
-python -m pytest tests/ -v
+python -m pytest -q
 # Tests run against synthetic policy documents — no AWS credentials required
 ```
 
@@ -199,4 +200,4 @@ What broke during build and what it revealed — see [`FAILURES.md`](./FAILURES.
 
 ## Threat Model
 
-What this tool is trying to detect and where it's blind — see [`docs/threat-model.md`](./threat-model.md).
+What this tool is trying to detect and where it's blind — see [`threat-model.md`](./threat-model.md).

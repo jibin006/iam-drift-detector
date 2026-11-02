@@ -9,7 +9,7 @@ See FAILURES.md for the full history of what broke.
 """
 
 import pytest
-from analyzer.risk_analyzer import (
+from risk_analyzer import (
     IAMRiskAnalyzer,
     RiskCategory,
     Severity,
