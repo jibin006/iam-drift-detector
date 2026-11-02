@@ -6,7 +6,7 @@ No AWS credentials needed — pure structural comparison.
 """
 
 import pytest
-from analyzer.drift_comparator import DriftType, IAMDriftComparator
+from drift_comparator import DriftType, IAMDriftComparator
 
 
 @pytest.fixture
