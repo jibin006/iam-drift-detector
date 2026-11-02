@@ -47,6 +47,8 @@ class DriftFinding:
     detail: str
     baseline_state: dict | None = None
     live_state: dict | None = None
+    ai_explanation: str | None = None
+    ai_explanation_error: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -56,6 +58,8 @@ class DriftFinding:
             "detail": self.detail,
             "baseline_state": self.baseline_state,
             "live_state": self.live_state,
+            "ai_explanation": self.ai_explanation,
+            "ai_explanation_error": self.ai_explanation_error,
         }
 
 
@@ -214,9 +218,42 @@ class IAMDriftComparator:
 
         for sid, baseline_stmt in baseline_stmts.items():
             if sid not in live_stmts:
-                continue  # statement removed — PERMISSIONS_REDUCED, tracked below
+                findings.append(DriftFinding(
+                    policy_name=policy_name,
+                    policy_arn=policy_arn,
+                    drift_type=DriftType.PERMISSIONS_REDUCED,
+                    detail=(
+                        f"Statement '{sid}' from the baseline is missing in live state. "
+                        "Its permissions have been removed; review whether this was intentional."
+                    ),
+                    baseline_state=baseline_stmt,
+                ))
+                continue
 
             live_stmt = live_stmts[sid]
+
+            baseline_effect = baseline_stmt.get("Effect", "Allow")
+            live_effect = live_stmt.get("Effect", "Allow")
+            if baseline_effect != live_effect:
+                effect_drift = (
+                    DriftType.PERMISSIONS_EXPANDED
+                    if live_effect == "Allow" and baseline_effect == "Deny"
+                    else DriftType.PERMISSIONS_REDUCED
+                )
+                findings.append(DriftFinding(
+                    policy_name=policy_name,
+                    policy_arn=policy_arn,
+                    drift_type=effect_drift,
+                    detail=(
+                        f"Statement '{sid}' changed Effect from {baseline_effect} to {live_effect}. "
+                        "An explicit Deny changed to Allow expands effective permissions."
+                        if effect_drift == DriftType.PERMISSIONS_EXPANDED
+                        else f"Statement '{sid}' changed Effect from {baseline_effect} to {live_effect}; "
+                             "review the resulting authorization impact."
+                    ),
+                    baseline_state=baseline_stmt,
+                    live_state=live_stmt,
+                ))
             baseline_actions = set(self._normalize(baseline_stmt.get("Action", [])))
             live_actions = set(self._normalize(live_stmt.get("Action", [])))
             baseline_resources = set(self._normalize(baseline_stmt.get("Resource", [])))
@@ -246,36 +283,22 @@ class IAMDriftComparator:
             # A condition removal can expand effective access without changing the action list
             baseline_conditions = baseline_stmt.get("Condition", {})
             live_conditions = live_stmt.get("Condition", {})
-
-            if baseline_conditions and not live_conditions:
+            removed_conditions = self._removed_condition_paths(
+                baseline_conditions, live_conditions
+            )
+            if removed_conditions:
                 findings.append(DriftFinding(
                     policy_name=policy_name,
                     policy_arn=policy_arn,
                     drift_type=DriftType.CONDITION_REMOVED,
                     detail=(
-                        f"Statement '{sid}' had condition constraints in baseline that are gone in live. "
-                        f"Removed conditions: {baseline_conditions}. "
-                        "Removing conditions expands effective access even when the action list is unchanged. "
-                        "Example: removing aws:MultiFactorAuthPresent condition removes MFA enforcement."
+                        f"Statement '{sid}' is missing condition constraints vs baseline: "
+                        f"{removed_conditions}. Removing conditions can expand effective access, "
+                        "including removing MFA enforcement."
                     ),
                     baseline_state=baseline_stmt,
                     live_state=live_stmt,
                 ))
-            elif baseline_conditions and live_conditions:
-                # Check for partial condition removal
-                removed_condition_keys = set(baseline_conditions.keys()) - set(live_conditions.keys())
-                if removed_condition_keys:
-                    findings.append(DriftFinding(
-                        policy_name=policy_name,
-                        policy_arn=policy_arn,
-                        drift_type=DriftType.CONDITION_REMOVED,
-                        detail=(
-                            f"Statement '{sid}' is missing condition keys vs baseline: {removed_condition_keys}. "
-                            "Partial condition removal still expands access."
-                        ),
-                        baseline_state=baseline_stmt,
-                        live_state=live_stmt,
-                    ))
 
             # Permissions reduced: track but lower urgency
             if removed_actions:
@@ -297,6 +320,25 @@ class IAMDriftComparator:
     # -----------------------------------------------------------------------
     # Helpers
     # -----------------------------------------------------------------------
+
+    @staticmethod
+    def _removed_condition_paths(baseline: Any, live: Any, prefix: str = "") -> list[str]:
+        """Return nested condition operators/keys present in baseline but absent live."""
+        removed: list[str] = []
+        if not isinstance(baseline, dict):
+            return removed
+        live_map = live if isinstance(live, dict) else {}
+        for key, baseline_value in baseline.items():
+            path = f"{prefix}.{key}" if prefix else str(key)
+            if key not in live_map:
+                removed.append(path)
+            elif isinstance(baseline_value, dict):
+                removed.extend(
+                    IAMDriftComparator._removed_condition_paths(
+                        baseline_value, live_map[key], path
+                    )
+                )
+        return removed
 
     @staticmethod
     def _normalize(value: Any) -> list[str]:
