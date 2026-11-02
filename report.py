@@ -21,9 +21,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from analyzer.drift_comparator import DriftFinding, DriftType
-from analyzer.risk_analyzer import PolicyAnalysisResult, Severity
-from analyzer.scanner import ScanSummary
+from drift_comparator import DriftFinding, DriftType
+from risk_analyzer import PolicyAnalysisResult, Severity
+from scanner import ScanSummary
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class ScanReport:
             self.risk_results,
             key=lambda r: (
                 _SEVERITY_ORDER.index(r.max_severity) if r.max_severity else 99,
-                -r.finding_count,
+                -len(r.findings),
             ),
         )
 
@@ -73,6 +73,7 @@ class ScanReport:
 
 def save_report(report: ScanReport, output_path: str = "iam-scan-report.json") -> None:
     path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
         json.dump(report.to_dict(), f, indent=2, default=str)
     logger.info(f"Report saved: {output_path}")
